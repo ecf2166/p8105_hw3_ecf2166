@@ -6,7 +6,112 @@ date: "2026-10-12"
 
 ```{r setup, include=FALSE}
 library(tidyverse)
+library(ggridges)
+library(patchwork)
+
+knitr::opts_chunk$set(
+  fig.width = 6,
+  fig.asp = .6,
+  out.width = "90%"
+)
 ```
 
+# Problem 1
+```{r p1_cleaning}
+library(p8105.datasets)
+data("ny_noaa")
+
+ny_noaa = ny_noaa |> 
+  separate(date, into = c("year", "month"), 4) |> 
+  separate(month, into= c("month", "day"), 3) |> 
+  mutate(
+    year = as.numeric(year),
+    month = as.numeric(month)*-1,
+    day = as.numeric(day)*-1,
+    tmax = as.numeric(tmax),
+    tmin = as.numeric(tmin)
+  )
+
+#According to the codebook, precipitation is reported in tenths of mm, so we need to divide by 10; tmax and tmin are also in tenths of degrees C
+
+ny_noaa = 
+  ny_noaa |> 
+  mutate(
+    prcp = prcp/10,
+    tmax = tmax/10,
+    tmin = tmin/10
+  )
+```
+
+This dataset contains daily weather data for New York from `r min(pull(ny_noaa, year))` to `r max(pull(ny_noaa, year))`. The variables include the date, maximum and minimum temperatures, precipitation, and snowfall. There are `r nrow(ny_noaa)` observations in this dataset. The average values for each variable are as follows:
+- the average maximum temperature is `r round(mean(pull(ny_noaa, tmax), na.rm = TRUE), 1)` degrees Celsius
+- the average minimum temperature is `r round(mean(pull(ny_noaa, tmin), na.rm = TRUE), 1)` degrees Celsius
+- the average precipitation is `r round(mean(pull(ny_noaa, prcp), na.rm = TRUE), 1)` mm
+- the average snowfall is `r round(mean(pull(ny_noaa, snow), na.rm = TRUE), 1)` mm
+- the average snowfall depth is `r round(mean(pull(ny_noaa, snwd), na.rm = TRUE), 1)` mm
+
+There is quite a bit of missing data in this dataset. There are,
+- `r sum(is.na(pull(ny_noaa, tmax)))` missing values for maximum temperature (`r sum(is.na(pull(ny_noaa, tmax)))/nrow(ny_noaa)*100` % of the data)
+- `r sum(is.na(pull(ny_noaa, tmin)))` missing values for minimum temperature (`r sum(is.na(pull(ny_noaa, tmin)))/nrow(ny_noaa)*100` % of the data)
+- `r sum(is.na(pull(ny_noaa, prcp)))` missing values for precipitation (`r sum(is.na(pull(ny_noaa, prcp)))/nrow(ny_noaa)*100` % of the data)
+- `r sum(is.na(pull(ny_noaa, snow)))` missing values for snowfall (`r sum(is.na(pull(ny_noaa, snow)))/nrow(ny_noaa)*100` % of the data)
 
 
+```{r snow_hist}
+ny_noaa |> 
+  ggplot(aes(x = snow)) + 
+  geom_histogram()
+```
+
+```{r}
+ny_noaa |>
+  count(snow) |>
+  arrange(desc(n))
+```
+The most commonly observed values are close to 0 for snowfall. Specifically, the most common values (aside from NA) are 0, 25, and 13 mm. This is because this weather data is taken for every day of the year, and in NY, there is only snow a couple months of the year, and there only tends to be a couple of days of heavy snowfall a year.
+
+```{r june_july_maxtemp}
+ny_noaa |> 
+  filter(month %in% c(1, 7)) |> 
+  mutate(
+    month = case_match(
+      month,
+      1 ~ "January",
+      7 ~ "July"
+    )
+  ) |> 
+  group_by(id, year, month) |> 
+  summarize(avg_tmax = mean(tmax, na.rm = TRUE)) |> 
+  ggplot(aes(x = year, y = avg_tmax)) + 
+  geom_point() + 
+  geom_smooth()+
+  facet_grid(.~month) + 
+  labs(
+    x = "Year",
+    y = "Average Max Temperature (C)"
+  )
+```
+The values appear to be much lower in January than July. They also tend to be more variable in January There appears to be one outlier in July (with a couple other points being potential outliers). It is hard to tell if any of the January values would be considered outliers without conducting further analyses. The graphs show a cyclical pattern rather than a long-term change over time, consistent with what we would expect from weather from year to year.
+
+Make a two-panel plot showing (i) tmax vs tmin for the full dataset (note that a scatterplot may not be the best option); and (ii) make a plot showing the distribution of snowfall values greater than 0 and less than 100 separately by year.
+```{r tmax_min_plot}
+p1_i_plot = ny_noaa |> 
+  ggplot(aes(x = tmin, y = tmax)) + 
+  geom_hex() + 
+  labs(
+    x = "Minimum Temperature (C)",
+    y = "Maximum Temperature (C)"
+  )
+
+p1_ii_plot = ny_noaa |> 
+  filter(snow > 0, snow < 100) |> 
+  ggplot(aes(x = snow, y = factor(year))) + 
+  geom_density_ridges() + 
+  labs(x = "Snowfall (mm)", y = "Year")
+
+p1_i_plot + p1_ii_plot
+```
+
+There appears to be a strong linear trend between maximum and minimum temperatures. There appears to be a few stations for which tmax is reported as lower than tmin, so there are errors in the data. There are also some extreme values (i.e. 60 degrees C) that are not plausible for NY.
+
+Additionally, each year shows higher counts of lower snowfall amounts. In most years, there appear to be a couple days with bigger snowfalls (around 80mm), which are likely from the 1-2 storms we have each year. Otherwise, most snowfall clusters between 0-40mm. 
