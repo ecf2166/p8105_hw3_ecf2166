@@ -14,6 +14,16 @@ knitr::opts_chunk$set(
   fig.asp = .6,
   out.width = "90%"
 )
+
+theme_set(theme_minimal() + theme(legend.position = "bottom"))
+
+options(
+  ggplot2.continuous.colour = "viridis",
+  ggplot2.continuous.fill = "viridis"
+)
+
+scale_colour_discrete = scale_colour_viridis_d
+scale_fill_discrete = scale_fill_viridis_d
 ```
 
 # Problem 1
@@ -59,6 +69,7 @@ There is quite a bit of missing data in this dataset. There are,
 
 ```{r snow_hist}
 ny_noaa |> 
+  drop_na() |> 
   ggplot(aes(x = snow)) + 
   geom_histogram()
 ```
@@ -81,7 +92,7 @@ ny_noaa |>
     )
   ) |> 
   group_by(id, year, month) |> 
-  summarize(avg_tmax = mean(tmax, na.rm = TRUE)) |> 
+  mutate(avg_tmax = mean(tmax, na.rm = TRUE)) |> 
   ggplot(aes(x = year, y = avg_tmax)) + 
   geom_point() + 
   geom_smooth()+
@@ -91,7 +102,7 @@ ny_noaa |>
     y = "Average Max Temperature (C)"
   )
 ```
-The values appear to be much lower in January than July. They also tend to be more variable in January There appears to be one outlier in July (with a couple other points being potential outliers). It is hard to tell if any of the January values would be considered outliers without conducting further analyses. The graphs show a cyclical pattern rather than a long-term change over time, consistent with what we would expect from weather from year to year.
+The values appear to be much lower in January than July. They also tend to be more variable in January. There appears to be one outlier in July (with a couple other points being potential outliers). It is hard to tell if any of the January values would be considered outliers without conducting further analyses. The graphs show a cyclical pattern rather than a long-term change over time, consistent with what we would expect for weather from year to year.
 
 Make a two-panel plot showing (i) tmax vs tmin for the full dataset (note that a scatterplot may not be the best option); and (ii) make a plot showing the distribution of snowfall values greater than 0 and less than 100 separately by year.
 ```{r tmax_min_plot}
@@ -115,3 +126,91 @@ p1_i_plot + p1_ii_plot
 There appears to be a strong linear trend between maximum and minimum temperatures. There appears to be a few stations for which tmax is reported as lower than tmin, so there are errors in the data. There are also some extreme values (i.e. 60 degrees C) that are not plausible for NY.
 
 Additionally, each year shows higher counts of lower snowfall amounts. In most years, there appear to be a couple days with bigger snowfalls (around 80mm), which are likely from the 1-2 storms we have each year. Otherwise, most snowfall clusters between 0-40mm. 
+
+# Problem 2
+```{r p2_data}
+# for nhanes_demog, 1 = male, 2 = female, 1 = Less than high school, 2 =  High school equivalent, 3  = More than high school
+
+nhanes_demog = read_csv("data/nhanes_covar.csv", skip = 4) |> 
+  janitor::clean_names() |> 
+  mutate(
+    sex = case_match(
+      sex,
+      1 ~ "Male",
+      2 ~ "Female"
+    ),
+    education = case_match(
+      education,
+      1 ~ "Less than high school",
+      2 ~ "High school equivalent",
+      3 ~ "More than high school"
+      )
+    ) |> 
+  mutate(
+    education = fct_relevel(education, c("Less than high school", "High school equivalent", "More than high school")),
+    sex = fct_relevel(sex, c("Male", "Female"))
+  ) |> 
+  filter(age > 21) |> 
+  drop_na()
+
+nhanes_accel = read_csv("data/nhanes_accel.csv") |> 
+  janitor::clean_names() |> 
+  pivot_longer(
+    starts_with("min"),
+    names_to = "minute",
+    names_prefix = "min",
+    values_to = "mims"
+  ) |> 
+  mutate(
+    minute = as.numeric(minute)
+  )
+
+nhanes = left_join(nhanes_demog, nhanes_accel, by = "seqn")
+```
+
+```{r sex_ed_tbl}
+nhanes |> 
+  group_by(sex, education) |> 
+  summarize(
+    count=n()
+  ) |>
+  knitr::kable(digits=2)
+```
+
+```{r sex_ed_age_plot}
+nhanes |> 
+  ggplot(aes(x=sex, y = age))+
+  geom_boxplot()+
+  facet_grid(.~education)
+```
+The distributions of all of the groups overlap substantially. In general, people with more than high school educations are a bit younger, though the quantiles overlap substantially. 
+
+```{r}
+nhanes |> 
+  group_by(seqn, sex, education) |> 
+  mutate(
+    total_mims = sum(mims, na.rm = TRUE)
+  ) |> 
+  ggplot(aes(x = age, y = total_mims, color = sex))+
+  geom_point()+
+  geom_smooth()+
+  facet_grid(.~education)+
+  labs(
+    x = "Age",
+    y = "Total Activity (MIMS)"
+  )
+```
+
+Total activity tends to trend downward with age in all groups. Additionally, the "Less than high school" has a steeper downward trend than the other two groups. Generally, males and females follow the same pattern in all three education groups. The trend does appear to be more defined in "Less than high school" than the other two groups.
+
+```{r}
+nhanes |> 
+  ggplot(aes(x = minute, y = mims, color = sex)) + 
+ #geom_point(alpha = 0.1) + I cant decide if I like the points (leaning no)
+  geom_smooth() + 
+  facet_grid(.~education)
+```
+
+In all three graphs, activity happens in the middle of the day. Females have slightly higher activity than males. There does not appear to be any major differences activity across education groups. Where "High school equivalent" and "More than high school" tend to plateau through the day, "less than high school" has more of a point around minute 750.
+
+# Problem 3
