@@ -214,3 +214,84 @@ nhanes |>
 In all three graphs, activity happens in the middle of the day. Females have slightly higher activity than males. There does not appear to be any major differences activity across education groups. Where "High school equivalent" and "More than high school" tend to plateau through the day, "less than high school" has more of a point around minute 750.
 
 # Problem 3
+```{r}
+citibike_0120 = read_csv("data/citibike/Jan 2020 Citi.csv") |> 
+  mutate(month = "Jan",
+         year = "2020")
+citibike_0720 = read_csv("data/citibike/July 2020 Citi.csv")|> 
+  mutate(month = "July",
+         year = "2020")
+citibike_0124 = read_csv("data/citibike/Jan 2024 Citi.csv")|> 
+  mutate(month = "Jan",
+         year = "2024")
+citibike_0724 = read_csv("data/citibike/July 2024 Citi.csv")|> 
+  mutate(month = "July",
+         year = "2024")
+
+citibike = bind_rows(citibike_0120, citibike_0720, citibike_0124, citibike_0724) |> 
+  janitor::clean_names() |> 
+  mutate(
+    month = fct_relevel(month, c("Jan", "July")),
+    year = fct_relevel(year, c("2020", "2024")),
+    rideable_type = fct_relevel(rideable_type, c("classic_bike", "docked_bike", "electric_bike")),
+    weekdays = fct_relevel(weekdays, c("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"))
+  )
+  
+citibike |> 
+  group_by(year, month, member_casual) |> 
+  summarize(
+    total_rides = n()
+  ) |> 
+  pivot_wider(
+    names_from = member_casual,
+    values_from = total_rides
+  ) |>
+  knitr::kable(digits=2)
+```
+From this table, it is evident that both members and casual riders tend to ride more in July than January. Additionally, across both casual riders and members, rides increased between 2020 and 2024. Overall, there are more members than casual riders across all groups.
+
+
+```{r}
+citibike |> 
+  filter(year == "2024", month == "July") |> 
+  group_by(start_station_name) |> 
+  summarize(
+    total_rides = n()
+  ) |> 
+  arrange(desc(total_rides)) |>
+  head(n=5) |> 
+  knitr::kable(digits=2)
+```
+
+```{r}
+citibike |> 
+  group_by(year, month, weekdays) |> 
+  summarize(
+    median_ride_duration = median(duration, na.rm = TRUE)
+  ) |> 
+  ggplot(aes(x = weekdays, y = median_ride_duration, color = month, group = month)) + 
+  geom_point() + 
+  geom_line() + 
+  facet_grid(.~year) + 
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  labs(
+    x = "Day of the Week",
+    y = "Median Ride Duration (minutes)"
+  )
+```
+
+From these plots, it is evident that the median ride duration is longer in July than January in both 2020 and 2024. Additionally, the median ride duration is longer in 2020 than 2024. In July of both years, the median ride duration tends to be longest on weekends and shortest on weekdays. In January, though, in 2020 the median ride duration is higher on weekends, but in 2024, it is relatively constant, with the longest median ride duration of Thursday-Saturday. 
+
+There were relatively few electric Citi Bikes in 2020, but many more are available now. For data in 2024, make a figure that shows the impact of month, membership status, and bike type on the distribution of ride duration. Comment on your results.
+```{r}
+citibike |> 
+  filter(year == "2024") |> 
+  ggplot(aes(x = duration, y = rideable_type, fill = member_casual)) + 
+  geom_density_ridges(alpha = 0.5) + 
+  facet_grid(.~month) + 
+  labs(
+    x = "Ride Duration (minutes)",
+    y = "Bike Type"
+  )
+```
+According to the above graphs, electric bike usage tends to be a bit higher in January than July for both casual riders and members. Additionally, across all graphs, there is a much higher density of shorter rides (less than 45 minutes) than longer rides. The distribution of ride duration is similar across casual riders and members, though casual riders tend to have a slightly higher density of longer rides than members. 
